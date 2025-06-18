@@ -7,10 +7,25 @@ const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = requir
 // Sign up
 exports.signup = async (req, res) => {
     try {
-        const { username, email, phone, password, gender, accountType } = req.body;
 
-        if (!username || (!email && !phone) || !password)
+        const { username, email = "", phone = "", password, gender, accountType } = req.body;
+
+        if (!username || (!email.trim() && !phone.trim()) || !password)
             return res.status(400).json({ msg: 'Required fields missing' });
+
+        const existingUsername = await User.findOne({ username });
+        if (existingUsername) return res.status(409).json({ msg: 'Username already taken' });
+
+        if (email.trim()) {
+            const existingEmail = await User.findOne({ email: email.trim() });
+            if (existingEmail) return res.status(409).json({ msg: 'Email already registered' });
+        }
+
+        if (phone.trim()) {
+            const existingPhone = await User.findOne({ phone: phone.trim() });
+            if (existingPhone) return res.status(409).json({ msg: 'Phone already registered' });
+        }
+
 
         const existingUser = await User.findOne({
             $or: [{ username }, { email }, { phone }]
@@ -40,10 +55,18 @@ exports.signup = async (req, res) => {
 // Login with password
 exports.login = async (req, res) => {
     try {
-        const { identifier, password } = req.body;
+        const identifier = (req.body.identifier || "").trim();
+        const password = req.body.password;
+
+        if (!identifier || !password)
+            return res.status(400).json({ msg: 'Identifier and password are required' });
 
         const user = await User.findOne({
-            $or: [{ username: identifier }, { email: identifier }, { phone: identifier }]
+            $or: [
+                { username: identifier },
+                { email: identifier },
+                { phone: identifier }
+            ]
         });
 
         if (!user) return res.status(404).json({ msg: 'User not found' });
@@ -51,7 +74,7 @@ exports.login = async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.passwordHash);
         if (!isMatch) return res.status(401).json({ msg: 'Incorrect password' });
 
-        await issueTokens(user.userId, res); // ✅ Now inside async
+        await issueTokens(user.userId, res);
     } catch (err) {
         res.status(500).json({ msg: 'Server error', error: err.message });
     }
@@ -86,25 +109,25 @@ exports.sendOtp = async (req, res) => {
 // Verify OTP
 exports.verifyOtp = async (req, res) => {
     try {
-      const { identifier, otp } = req.body;
-  
-      const user = await User.findOne({
-        $or: [{ username: identifier }, { email: identifier }, { phone: identifier }]
-      });
-  
-      if (!user || user.otp !== otp || user.otpExpiry < Date.now())
-        return res.status(401).json({ msg: 'Invalid or expired OTP' });
-  
-      user.otp = null;
-      user.otpExpiry = null;
-      await user.save();
-  
-      await issueTokens(user.userId, res); // ✅ fixed
+        const { identifier, otp } = req.body;
+
+        const user = await User.findOne({
+            $or: [{ username: identifier }, { email: identifier }, { phone: identifier }]
+        });
+
+        if (!user || user.otp !== otp || user.otpExpiry < Date.now())
+            return res.status(401).json({ msg: 'Invalid or expired OTP' });
+
+        user.otp = null;
+        user.otpExpiry = null;
+        await user.save();
+
+        await issueTokens(user.userId, res); // ✅ fixed
     } catch (err) {
-      res.status(500).json({ msg: 'Server error', error: err.message });
+        res.status(500).json({ msg: 'Server error', error: err.message });
     }
-  };
-  
+};
+
 
 
 
