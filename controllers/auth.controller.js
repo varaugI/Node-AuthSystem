@@ -27,9 +27,12 @@ exports.signup = async (req, res) => {
         }
 
 
-        const existingUser = await User.findOne({
-            $or: [{ username }, { email }, { phone }]
-        });
+        const orConditions = [{ username }];
+        if (email.trim()) orConditions.push({ email: email.trim() });
+        if (phone.trim()) orConditions.push({ phone: phone.trim() });
+
+        const existingUser = await User.findOne({ $or: orConditions });
+
 
         if (existingUser) return res.status(409).json({ msg: 'User already exists' });
 
@@ -37,12 +40,13 @@ exports.signup = async (req, res) => {
 
         const newUser = new User({
             username,
-            email,
-            phone,
             passwordHash,
             gender,
             accountType
         });
+
+        if (email.trim()) newUser.email = email.trim();
+        if (phone.trim()) newUser.phone = phone.trim();
 
         await newUser.save();
 
@@ -93,13 +97,12 @@ exports.sendOtp = async (req, res) => {
         if (!user) return res.status(404).json({ msg: 'User not found' });
 
         const otp = generateOTP();
-        const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 min
+        const expiry = new Date(Date.now() + 5 * 60 * 1000);
 
         user.otp = otp;
         user.otpExpiry = expiry;
         await user.save();
 
-        // For now, just return OTP (in real life, send via SMS/email)
         res.json({ msg: 'OTP sent', otp });
     } catch (err) {
         res.status(500).json({ msg: 'Server error', error: err.message });
@@ -122,7 +125,7 @@ exports.verifyOtp = async (req, res) => {
         user.otpExpiry = null;
         await user.save();
 
-        await issueTokens(user.userId, res); // ✅ fixed
+        await issueTokens(user.userId, res);
     } catch (err) {
         res.status(500).json({ msg: 'Server error', error: err.message });
     }
@@ -189,33 +192,33 @@ exports.logout = async (req, res) => {
 
 
 exports.resetPassword = async (req, res) => {
-  try {
-    const { identifier, otp, newPassword } = req.body;
+    try {
+        const { identifier, otp, newPassword } = req.body;
 
-    if (!identifier || !otp || !newPassword) {
-      return res.status(400).json({ msg: 'All fields are required' });
+        if (!identifier || !otp || !newPassword) {
+            return res.status(400).json({ msg: 'All fields are required' });
+        }
+
+        const user = await User.findOne({
+            $or: [{ username: identifier }, { email: identifier }, { phone: identifier }]
+        });
+
+        if (!user) {
+            return res.status(404).json({ msg: 'User not found' });
+        }
+
+        if (!user.otp || user.otp !== otp || user.otpExpiry < Date.now()) {
+            return res.status(401).json({ msg: 'Invalid or expired OTP' });
+        }
+
+        const passwordHash = await bcrypt.hash(newPassword, 10);
+        user.passwordHash = passwordHash;
+        user.otp = null;
+        user.otpExpiry = null;
+        await user.save();
+
+        res.json({ msg: 'Password updated successfully' });
+    } catch (err) {
+        res.status(500).json({ msg: 'Server error', error: err.message });
     }
-
-    const user = await User.findOne({
-      $or: [{ username: identifier }, { email: identifier }, { phone: identifier }]
-    });
-
-    if (!user) {
-      return res.status(404).json({ msg: 'User not found' });
-    }
-
-    if (!user.otp || user.otp !== otp || user.otpExpiry < Date.now()) {
-      return res.status(401).json({ msg: 'Invalid or expired OTP' });
-    }
-
-    const passwordHash = await bcrypt.hash(newPassword, 10);
-    user.passwordHash = passwordHash;
-    user.otp = null;
-    user.otpExpiry = null;
-    await user.save();
-
-    res.json({ msg: 'Password updated successfully' });
-  } catch (err) {
-    res.status(500).json({ msg: 'Server error', error: err.message });
-  }
 };
