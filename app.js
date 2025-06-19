@@ -7,6 +7,7 @@ const authRoutes = require('./routes/auth.routes');
 const profileRoutes = require('./routes/profile.routes');
 const accessRoutes = require('./routes/access.routes');
 const itemsRoutes = require('./routes/items.routes');
+const interactionRoutes = require('./routes/interaction.routes');
 
 app.use(cors({
     origin: 'http://localhost:3000', // or '*' to allow all origins
@@ -18,4 +19,7 @@ app.use('/auth', authRoutes);
 app.use('/profile', profileRoutes);
 app.use('/access', accessRoutes);
 app.use('/items', itemsRoutes);
+app.use('/interaction', interactionRoutes);
+
+
 module.exports = app;
