@@ -186,3 +186,36 @@ exports.logout = async (req, res) => {
         res.status(500).json({ msg: 'Logout failed', error: err.message });
     }
 };
+
+
+exports.resetPassword = async (req, res) => {
+  try {
+    const { identifier, otp, newPassword } = req.body;
+
+    if (!identifier || !otp || !newPassword) {
+      return res.status(400).json({ msg: 'All fields are required' });
+    }
+
+    const user = await User.findOne({
+      $or: [{ username: identifier }, { email: identifier }, { phone: identifier }]
+    });
+
+    if (!user) {
+      return res.status(404).json({ msg: 'User not found' });
+    }
+
+    if (!user.otp || user.otp !== otp || user.otpExpiry < Date.now()) {
+      return res.status(401).json({ msg: 'Invalid or expired OTP' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    user.passwordHash = passwordHash;
+    user.otp = null;
+    user.otpExpiry = null;
+    await user.save();
+
+    res.json({ msg: 'Password updated successfully' });
+  } catch (err) {
+    res.status(500).json({ msg: 'Server error', error: err.message });
+  }
+};

@@ -4,14 +4,23 @@ const User = require('../models/user.model');
 exports.editProfile = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const updates = req.body;
 
-    if (updates.userId) delete updates.userId; // Cannot change
+    // Whitelist of fields user is allowed to update
+    const allowedUpdates = ['username', 'gender', 'phone','email'];
+    const updates = {};
 
+    allowedUpdates.forEach(field => {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    });
+
+    // Optional: Check username availability
     if (updates.username) {
       const exists = await User.findOne({ username: updates.username });
-      if (exists && exists.userId !== userId)
+      if (exists && exists.userId.toString() !== userId.toString()) {
         return res.status(409).json({ msg: 'Username already taken' });
+      }
     }
 
     const updatedUser = await User.findOneAndUpdate(
